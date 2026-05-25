@@ -1,0 +1,29 @@
+# Karate 自动化测试规范
+
+## 测试工作流
+1. 先用 `list_feature_files` 查看是否有类似测试可参考。
+2. 如有参考，用 `read_feature_file` 读取学习写法。
+3. 用 `dry_run_api` 试调接口，获取真实响应结构。
+4. 基于真实响应 + 业务规则，生成 .feature 文件内容。
+5. 用 `write_feature_file` 将内容写入磁盘。
+6. 用 `execute_karate_and_parse` 执行测试。
+7. 如果失败，分析错误日志，修复后重新执行。
+
+## Karate DSL 规范
+- Background 固定写法：
+  ```karate
+  Background:
+    * url 'http://localhost:8080'
+    * configure headers = { 'Cookie': '#(cookie)' }
+  ```
+- 断言风格（JsonPath + 类型匹配）：
+  ```karate
+  * match response.code == 0
+  * match response.data.list == '#[_ > 0]'
+  * match each response.data.list contains { id: '#number', name: '#string' }
+  ```
+- 禁止硬编码 ID，需从前置接口或上下文动态获取。
+- Scenario 必须使用明确的中文描述。
+
+## 业务知识目录
+参考 `knowledge/catalog.md` 了解业务知识文件索引，并读取相应的知识文件来补充业务上下文。

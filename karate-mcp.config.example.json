@@ -1,0 +1,21 @@
+{
+  "project": {
+    "root": "/path/to/your/java-project",
+    "featureBaseDir": "src/test/java/features",
+    "karateReportsDir": "target/karate-reports",
+    "karateRunnerClass": "KarateRunner"
+  },
+  "env": {
+    "baseUrl": "http://localhost:8080",
+    "authLoginUrl": "/api/auth/login",
+    "authLoginPayload": {
+      "username": "test_user",
+      "password": "test_pass"
+    },
+    "cookieFieldPath": "data.cookie"
+  },
+  "executor": {
+    "timeoutSeconds": 300,
+    "mvnCommand": "mvn"
+  }
+}
