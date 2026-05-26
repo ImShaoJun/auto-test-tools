@@ -4,7 +4,7 @@
   "description": "MCP Server for BDD automated API testing — pure TypeScript engine with custom DSL, no Java dependency",
   "type": "module",
   "bin": {
-    "bdd-mcp-server": "./dist/index.js"
+    "bdd-mcp-server": "./dist/index.js",
     "server-bdd": "./dist/index.js"
   },
   "scripts": {
@@ -28,6 +28,7 @@
     "@cucumber/gherkin": "^29.0.0",
     "@cucumber/messages": "^26.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "playwright": "^1.60.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

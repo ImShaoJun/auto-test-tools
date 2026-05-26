@@ -1,6 +1,9 @@
 // ─── Execution Context ──────────────────────────────────────────────────────
 //
-// 每个 Scenario 拥有独立的 ExecutionContext，维护 HTTP 请求/响应状态和变量。
+// 每个 Scenario 拥有独立的 ExecutionContext，维护 HTTP 请求/响应状态和变量，
+// 并负责管理独立的浏览器上下文（用于 UI 测试）。
+
+import { chromium, type Browser, type Page } from "playwright";
 
 export class ExecutionContext {
   /** 基础 URL，如 http://localhost:8080 */
@@ -29,6 +32,10 @@ export class ExecutionContext {
 
   /** 用户定义变量（通过 def 关键字） */
   variables: Record<string, unknown> = {};
+
+  // ─── UI Automation State ───
+  browser: Browser | null = null;
+  page: Page | null = null;
 
   /**
    * 从配置初始化上下文
@@ -170,6 +177,41 @@ export class ExecutionContext {
     });
 
     return result;
+  }
+
+  // ─── UI Automation Methods ────────────────────────────────────────────────
+
+  /**
+   * 启动浏览器并打开页面（如果尚未启动）
+   */
+  async initDriver(url?: string): Promise<Page> {
+    if (!this.browser) {
+      console.error("[ui] 正在启动浏览器...");
+      this.browser = await chromium.launch({ headless: true });
+    }
+    if (!this.page) {
+      this.page = await this.browser.newPage();
+    }
+    if (url) {
+      console.error(`[ui] 导航至: ${url}`);
+      await this.page.goto(url);
+    }
+    return this.page;
+  }
+
+  /**
+   * 清理浏览器资源
+   */
+  async closeDriver(): Promise<void> {
+    if (this.page) {
+      await this.page.close().catch(() => {});
+      this.page = null;
+    }
+    if (this.browser) {
+      console.error("[ui] 关闭浏览器...");
+      await this.browser.close().catch(() => {});
+      this.browser = null;
+    }
   }
 }
 

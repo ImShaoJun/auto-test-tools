@@ -104,26 +104,11 @@ export async function runFeature(
     const ctx = new ExecutionContext(baseUrl, cookie);
     const stepResults: StepResult[] = [];
     let scenarioPassed = true;
+    let scenarioError: string | undefined;
 
-    // 先执行 Background 步骤
-    for (const step of backgroundSteps) {
-      const result = await executeStep(
-        step.keyword.trim(),
-        step.text,
-        step.docString?.content,
-        ctx
-      );
-      stepResults.push(result);
-
-      if (!result.passed) {
-        scenarioPassed = false;
-        break; // Background 失败则跳过后续步骤
-      }
-    }
-
-    // 再执行 Scenario 步骤（如果 Background 通过）
-    if (scenarioPassed) {
-      for (const step of scenario.steps) {
+    try {
+      // 先执行 Background 步骤
+      for (const step of backgroundSteps) {
         const result = await executeStep(
           step.keyword.trim(),
           step.text,
@@ -134,15 +119,39 @@ export async function runFeature(
 
         if (!result.passed) {
           scenarioPassed = false;
-          break; // 步骤失败则跳过后续
+          scenarioError = result.error;
+          break; // Background 失败则跳过后续步骤
         }
       }
+
+      // 再执行 Scenario 步骤（如果 Background 通过）
+      if (scenarioPassed) {
+        for (const step of scenario.steps) {
+          const result = await executeStep(
+            step.keyword.trim(),
+            step.text,
+            step.docString?.content,
+            ctx
+          );
+          stepResults.push(result);
+
+          if (!result.passed) {
+            scenarioPassed = false;
+            scenarioError = result.error;
+            break; // 步骤失败则跳过后续
+          }
+        }
+      }
+    } finally {
+      // 确保 UI 浏览器被清理（如果没有启动浏览器，该方法内部会静默返回）
+      await ctx.closeDriver();
     }
 
     results.push({
       name: scenario.name,
       passed: scenarioPassed,
       steps: stepResults,
+      error: scenarioError,
     });
   }
 

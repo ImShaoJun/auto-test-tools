@@ -2,7 +2,8 @@
 //
 // 解析 Gherkin Step 文本并执行对应操作。
 // 实现 Karate 风格的 BDD 关键词：url, path, header, param, request, method,
-// status, match, def, print, cookie 等。
+// status, match, def, print, cookie,
+// 以及 UI 相关的：driver, click, input, waitFor, screenshot 等。
 
 import { ExecutionContext } from "./context.js";
 import { deepEquals, containsMatch, matchesTypeMarker } from "./matchers.js";
@@ -126,7 +127,13 @@ export async function executeStep(
       if (eqIdx === -1) throw new Error(`def 语法错误: ${trimmed}`);
       const varName = rest.substring(0, eqIdx).trim();
       const expr = rest.substring(eqIdx + 1).trim();
-      ctx.variables[varName] = ctx.resolveExpression(expr);
+      
+      // 处理异步 UI 数据提取，如 text('#id')
+      if (expr.startsWith("text(") || expr.startsWith("attribute(")) {
+        ctx.variables[varName] = await evaluateAsyncUIExpression(expr, ctx);
+      } else {
+        ctx.variables[varName] = ctx.resolveExpression(expr);
+      }
       return ok(keyword, trimmed);
     }
 
@@ -135,6 +142,54 @@ export async function executeStep(
       const expr = trimmed.substring(6).trim();
       const value = ctx.resolveExpression(expr);
       console.error(`[print] ${expr} =`, JSON.stringify(value, null, 2));
+      return ok(keyword, trimmed);
+    }
+
+    // ─── UI Automation Steps ────────────────────────────────────────────────
+
+    // ── driver 'https://example.com' ──
+    if (trimmed.startsWith("driver ")) {
+      const value = extractValue(trimmed.substring(7), ctx);
+      await ctx.initDriver(String(value));
+      return ok(keyword, trimmed);
+    }
+
+    // ── click '#btn' ──
+    if (trimmed.startsWith("click ")) {
+      if (!ctx.page) throw new Error("尚未初始化浏览器，请先调用 driver");
+      const selector = String(extractValue(trimmed.substring(6), ctx));
+      await ctx.page.click(selector);
+      return ok(keyword, trimmed);
+    }
+
+    // ── input '#input', 'text' ──
+    if (trimmed.startsWith("input ")) {
+      if (!ctx.page) throw new Error("尚未初始化浏览器，请先调用 driver");
+      const rest = trimmed.substring(6).trim();
+      // 解析两个参数：selector 和 text (简化按逗号分割，注意字符串内如果有逗号会出问题，这里做简单处理)
+      const commaIdx = rest.indexOf(",");
+      if (commaIdx === -1) throw new Error(`input 语法错误: ${trimmed}`);
+      const selectorRaw = rest.substring(0, commaIdx).trim();
+      const textRaw = rest.substring(commaIdx + 1).trim();
+      const selector = String(extractValue(selectorRaw, ctx));
+      const text = String(extractValue(textRaw, ctx));
+      await ctx.page.fill(selector, text);
+      return ok(keyword, trimmed);
+    }
+
+    // ── waitFor '.selector' ──
+    if (trimmed.startsWith("waitFor ")) {
+      if (!ctx.page) throw new Error("尚未初始化浏览器，请先调用 driver");
+      const selector = String(extractValue(trimmed.substring(8), ctx));
+      await ctx.page.waitForSelector(selector);
+      return ok(keyword, trimmed);
+    }
+
+    // ── screenshot 'path.png' ──
+    if (trimmed.startsWith("screenshot ")) {
+      if (!ctx.page) throw new Error("尚未初始化浏览器，请先调用 driver");
+      const path = String(extractValue(trimmed.substring(11), ctx));
+      await ctx.page.screenshot({ path });
       return ok(keyword, trimmed);
     }
 
@@ -379,6 +434,29 @@ function extractValue(raw: string, ctx: ExecutionContext): unknown {
 function evaluateConcatExpression(raw: string, ctx: ExecutionContext): string {
   const parts = raw.split("+").map((p) => p.trim());
   return parts.map((part) => String(extractValue(part, ctx))).join("");
+}
+
+/**
+ * 处理依赖 Playwright 的异步表达式求值 (如 text 和 attribute)
+ */
+async function evaluateAsyncUIExpression(expr: string, ctx: ExecutionContext): Promise<unknown> {
+  if (!ctx.page) {
+    throw new Error(`执行 UI 表达式失败，尚未初始化浏览器: ${expr}`);
+  }
+
+  // 匹配 text('.selector')
+  const textMatch = expr.match(/^text\((['"])(.*?)\1\)$/);
+  if (textMatch) {
+    return await ctx.page.textContent(textMatch[2]);
+  }
+
+  // 匹配 attribute('.selector', 'name')
+  const attrMatch = expr.match(/^attribute\((['"])(.*?)\1,\s*(['"])(.*?)\3\)$/);
+  if (attrMatch) {
+    return await ctx.page.getAttribute(attrMatch[2], attrMatch[4]);
+  }
+
+  throw new Error(`未知的异步 UI 表达式: ${expr}`);
 }
 
 // ─── Result Helpers ─────────────────────────────────────────────────────────

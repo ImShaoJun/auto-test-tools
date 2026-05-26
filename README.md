@@ -23,7 +23,10 @@ cd auto-test-tools
 # 2. 安装依赖
 npm install
 
-# 3. 编译 TypeScript 源码
+# 3. 安装浏览器内核 (用于 UI 测试，必执行)
+npx playwright install
+
+# 4. 编译 TypeScript 源码
 npm run build
 ```
 
@@ -133,7 +136,7 @@ When method GET   # 支持 GET / POST / PUT / DELETE / PATCH
 ```
 
 ### 4. 强大的断言系统 (Then match)
-使用 `response.xxx` 路径直接读取返回 JSON。
+使用 `response.xxx` 路径直接读取 API 返回 JSON。
 
 ```gherkin
 Then status 200                         # 断言 HTTP 状态码
@@ -152,17 +155,29 @@ Then match each response.data.list contains { status: 1 } # 数组全量匹配
 *   `'#object'` (对象)
 *   `'#notnull'` (非空) / `'#null'` (为空)
 *   `'#uuid'` (标准的 UUID 格式)
-*   `'#[_ > 0]'` (长度大于 0 的数组，支持 `==`, `<`, `>=`, `!=` 等运算符)
+*   `'#[_ > 0]'` (长度大于 0 的数组)
 
-*示例：*
+### 5. UI 浏览器操控 (Playwright)
+使用原生 Playwright 指令操控浏览器，可以和 API 无缝混合：
 ```gherkin
-Then match response.data.id == '#number'
-Then match response.data.list == '#[_ > 0]'
+Given driver 'https://example.com'        # 启动无头浏览器并导航
+When click '#login-btn'                   # 点击元素
+And input '#username', 'admin'            # 填入表单
+And waitFor '.welcome-msg'                # 等待元素出现
+And screenshot 'error.png'                # 截图排错
 ```
 
-### 5. 变量提取与日志打印
-利用 `def` 可将前一个接口的返回存入上下文，供后续请求的 `path` 或 `request` 拼接使用。
+### 6. 变量提取与编排 (def)
+利用 `def` 可提取上一步的数据，供后续请求的参数或断言使用：
+
+**从 API 提取：**
 ```gherkin
 Given def userId = response.data.userId
-And print '生成的UserID是: ' + userId
+```
+
+**从 UI 提取 (支持异步计算)：**
+```gherkin
+Given def welcomeText = text('.welcome-msg')
+Given def linkUrl = attribute('#link', 'href')
+Then match welcomeText == 'Hello, test!'
 ```
