@@ -1,7 +1,7 @@
 {
   "name": "karate-mcp-server",
-  "version": "1.0.0",
-  "description": "MCP Server for Karate automated testing - provides tools for Claude Code to generate and execute BDD test scripts",
+  "version": "2.0.0",
+  "description": "MCP Server for BDD automated API testing — pure TypeScript engine with Karate-style DSL, no Java dependency",
   "type": "module",
   "bin": {
     "karate-mcp-server": "./dist/index.js"
@@ -11,12 +11,22 @@
     "build": "tsc",
     "start": "node dist/index.js"
   },
-  "keywords": ["mcp", "karate", "testing", "automation", "bdd"],
+  "keywords": [
+    "mcp",
+    "karate",
+    "bdd",
+    "testing",
+    "automation",
+    "cucumber",
+    "gherkin"
+  ],
   "license": "Apache-2.0",
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@cucumber/gherkin": "^29.0.0",
+    "@cucumber/messages": "^26.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.24.0"
   },

@@ -6,14 +6,14 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-
+import { resolve } from "node:path";
 import { loadConfig, parseCliConfigPath } from "./config.js";
-import { handleWriteFeatureFile, type WriteFeatureParams } from "./tools/writer.js";
-import { handleDryRunApi, type DryRunParams } from "./tools/dryRunner.js";
-import { handleListFeatures, type ListFeaturesParams } from "./tools/listFeatures.js";
-import { handleReadFeature, type ReadFeatureParams } from "./tools/readFeature.js";
 import {
-  handleExecuteKarateAndParse,
+  handleGenerateFeature,
+  type GenerateParams,
+} from "./tools/generator.js";
+import {
+  handleExecuteFeature,
   type ExecuteParams,
 } from "./tools/executor.js";
 
@@ -21,90 +21,61 @@ import {
 
 const TOOLS = [
   {
-    name: "write_feature_file",
-    description: "将生成的 Karate .feature 文件内容写入到本地磁盘。自动处理目录创建。",
+    name: "generate_feature",
+    description:
+      "将生成的 BDD 测试脚本（.feature 文件）写入磁盘。\n\n**重要提示：由于你（LLM）负责生成脚本内容，你必须严格遵循以下自定义 Gherkin DSL 语法规则**：\n\n1. **请求构建 (Given)**\n   - `Given url '<URL>'` — 设置基础 URL\n   - `Given path '<路径>'` — 设置请求路径\n   - `Given header <Name> = '<value>'`\n   - `Given cookie '<value>'`\n   - `Given param <name> = <value>`\n   - `Given request <JSON>` 或使用 DocString 形式\n   - `Given def <var> = <expr>` — 定义变量 (如 `def userId = response.data.id`)\n\n2. **执行 (When)**\n   - `When method GET|POST|PUT|DELETE|PATCH`\n\n3. **断言 (Then)**\n   - `Then status <code>`\n   - `Then match <expr> == <expected>`\n   - `Then match <expr> != <expected>`\n   - `Then match <expr> contains <object>`\n   - `Then match each <array> contains <object>`\n\n4. **类型标记 (用于 match 断言)**\n   - `'#number'`, `'#string'`, `'#boolean'`, `'#array'`, `'#object'`, `'#notnull'`, `'#null'`, `'#uuid'`\n   - `'#[_ > 0]'` (数组长度断言)\n\n5. **调试**\n   - `And print <expr>`\n\n断言时使用 `response.xxx` 访问响应字段。",
     inputSchema: {
       type: "object" as const,
       properties: {
         targetPath: {
           type: "string",
-          description: "生成的 .feature 文件保存的相对路径（相对于 featureBaseDir），例如 user/user_list.feature",
+          description:
+            "保存的 .feature 文件路径（相对 workspaceDir 或绝对路径）。",
         },
-        content: {
+        featureContent: {
           type: "string",
-          description: ".feature 文件的完整文本内容",
+          description: "按照上述 DSL 规则生成的完整 .feature 文件内容。",
         },
       },
-      required: ["targetPath", "content"],
+      required: ["targetPath", "featureContent"],
     },
   },
   {
-    name: "dry_run_api",
-    description: "试调真实的后端接口，返回 HTTP 响应。用于在编写 Karate 断言前观察真实的响应结构。会自动携带配置文件中的 Cookie。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        method: {
-          type: "string",
-          enum: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-          description: "HTTP 方法",
-        },
-        path: {
-          type: "string",
-          description: "接口路径，例如 /api/user/list",
-        },
-        queryParams: {
-          type: "object",
-          description: "Query 参数（GET 时填写）",
-        },
-        body: {
-          type: "object",
-          description: "请求体结构（POST/PUT 时填写）",
-        },
-        headers: {
-          type: "object",
-          description: "额外的 HTTP Header",
-        },
-      },
-      required: ["method", "path"],
-    },
-  },
-  {
-    name: "list_feature_files",
-    description: "扫描并列出项目中已存在的 Karate .feature 文件。用于在编写新测试前查找可参考的类似用例。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        subDir: {
-          type: "string",
-          description: "可选。指定要扫描的子目录（相对于 featureBaseDir）。留空则扫描所有目录。",
-        },
-      },
-    },
-  },
-  {
-    name: "read_feature_file",
-    description: "读取指定的 Karate .feature 文件内容。用于学习项目内现有的测试写法和断言规范。",
+    name: "execute_feature",
+    description:
+      "执行指定的 .feature BDD 测试脚本。自动处理认证 Cookie（支持直传 cookie、运行时指定登录接口、或使用配置文件预设），在进程内执行 HTTP 请求和断言，返回结构化的测试结果。",
     inputSchema: {
       type: "object" as const,
       properties: {
         featurePath: {
           type: "string",
-          description: "要读取的 .feature 文件的相对路径，例如 user/user_list.feature",
+          description:
+            "要执行的 .feature 文件路径。相对路径基于 workspaceDir，也支持绝对路径。",
         },
-      },
-      required: ["featurePath"],
-    },
-  },
-  {
-    name: "execute_karate_and_parse",
-    description: "执行指定的 Karate .feature 测试脚本。自动处理认证 Cookie 获取，触发 Maven 执行，并返回过滤清洗后的测试结果。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        featurePath: {
+        cookie: {
           type: "string",
-          description: "要执行的 .feature 文件路径（相对于 featureBaseDir 的 classpath 路径），例如 user/user_list.feature",
+          description:
+            "直接传入的 Cookie 值（如 SESSION=abc123）。优先级最高，设置后跳过自动登录。",
+        },
+        auth: {
+          type: "object",
+          description: "运行时指定的认证配置（优先级高于配置文件预设）",
+          properties: {
+            loginUrl: {
+              type: "string",
+              description: "登录接口路径，如 /api/auth/login",
+            },
+            loginPayload: {
+              type: "object",
+              description: "登录请求体",
+            },
+            cookieFieldPath: {
+              type: "string",
+              description:
+                "JSON 响应中 cookie 字段路径，默认 data.cookie",
+            },
+          },
+          required: ["loginUrl", "loginPayload"],
         },
       },
       required: ["featurePath"],
@@ -119,77 +90,75 @@ async function main() {
   const cliConfigPath = parseCliConfigPath();
   const config = loadConfig(cliConfigPath);
 
-  // 2. 创建 MCP Server
+  // 2. 解析 workspaceDir
+  const workspaceDir = resolve(config.workspaceDir);
+
+  // 3. 创建 MCP Server
   const server = new Server(
-    { name: "karate-mcp-server", version: "1.1.0" },
+    { name: "karate-mcp-server", version: "2.0.0" },
     { capabilities: { tools: {} } }
   );
 
-  // 3. 注册 Tool 列表
+  // 4. 注册 Tool 列表
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOLS,
   }));
 
-  // 4. 注册 Tool 调用处理
+  // 5. 注册 Tool 调用处理
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
-    try {
-      switch (name) {
-        case "write_feature_file": {
-          const params = args as unknown as WriteFeatureParams;
-          const result = await handleWriteFeatureFile(params, config);
+    switch (name) {
+      case "generate_feature": {
+        try {
+          const params = args as unknown as GenerateParams;
+          const result = await handleGenerateFeature(params, workspaceDir);
           return { content: [{ type: "text" as const, text: result }] };
-        }
-
-        case "dry_run_api": {
-          const params = args as unknown as DryRunParams;
-          const result = await handleDryRunApi(params, config);
-          return { content: [{ type: "text" as const, text: result }] };
-        }
-
-        case "list_feature_files": {
-          const params = args as unknown as ListFeaturesParams;
-          const result = await handleListFeatures(params, config);
-          return { content: [{ type: "text" as const, text: result }] };
-        }
-
-        case "read_feature_file": {
-          const params = args as unknown as ReadFeatureParams;
-          const result = await handleReadFeature(params, config);
-          return { content: [{ type: "text" as const, text: result }] };
-        }
-
-        case "execute_karate_and_parse": {
-          const params = args as unknown as ExecuteParams;
-          const result = await handleExecuteKarateAndParse(params, config);
-          return { content: [{ type: "text" as const, text: result }] };
-        }
-
-        default:
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
           return {
             content: [
-              { type: "text" as const, text: `❌ 未知工具: ${name}` },
+              { type: "text" as const, text: `❌ 写入失败: ${errorMsg}` },
             ],
           };
+        }
       }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      return {
-        content: [
-          { type: "text" as const, text: `❌ 执行失败: ${errorMsg}` },
-        ],
-      };
+
+      case "execute_feature": {
+        try {
+          const params = args as unknown as ExecuteParams;
+          const result = await handleExecuteFeature(
+            params,
+            config,
+            workspaceDir
+          );
+          return { content: [{ type: "text" as const, text: result }] };
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          return {
+            content: [
+              { type: "text" as const, text: `❌ 执行异常: ${errorMsg}` },
+            ],
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            { type: "text" as const, text: `❌ 未知工具: ${name}` },
+          ],
+        };
     }
   });
 
-  // 5. 启动 stdio 传输
+  // 7. 启动 stdio 传输
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.error("[server] karate-mcp-server 已启动，等待连接...");
-  console.error(`[server] 项目根路径: ${config.project.root}`);
+  console.error("[server] karate-mcp-server v2.0 已启动（纯 TS 引擎）");
   console.error(`[server] 基础 URL: ${config.env.baseUrl}`);
+  console.error(`[server] 工作目录: ${workspaceDir}`);
 }
 
 main().catch((err) => {

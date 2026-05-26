@@ -5,26 +5,9 @@ import { z } from "zod";
 
 // ─── Configuration Schema ───────────────────────────────────────────────────
 
-const ProjectSchema = z.object({
-  root: z.string().describe("Java 项目根路径"),
-  featureBaseDir: z
-    .string()
-    .default("src/test/java/features")
-    .describe("feature 文件相对路径"),
-  karateReportsDir: z
-    .string()
-    .default("target/karate-reports")
-    .describe("Karate 报告输出路径"),
-  karateRunnerClass: z
-    .string()
-    .default("KarateRunner")
-    .describe("Runner 类名"),
-});
-
-const EnvSchema = z.object({
-  baseUrl: z.string().url().describe("API 基础 URL"),
-  authLoginUrl: z.string().describe("登录接口路径"),
-  authLoginPayload: z
+const AuthSchema = z.object({
+  loginUrl: z.string().describe("登录接口路径"),
+  loginPayload: z
     .record(z.unknown())
     .describe("登录请求体"),
   cookieFieldPath: z
@@ -33,25 +16,20 @@ const EnvSchema = z.object({
     .describe("JSON 响应中 cookie 字段路径"),
 });
 
-const ExecutorSchema = z.object({
-  timeoutSeconds: z
-    .number()
-    .int()
-    .positive()
-    .default(300)
-    .describe("Maven 执行超时（秒）"),
-  mvnCommand: z
-    .string()
-    .default("mvn")
-    .describe("Maven 命令"),
+const EnvSchema = z.object({
+  baseUrl: z.string().describe("API 基础 URL"),
+  auth: AuthSchema.optional().describe("认证配置（可选）"),
 });
 
 const ConfigSchema = z.object({
-  project: ProjectSchema,
+  workspaceDir: z
+    .string()
+    .default("./features")
+    .describe("Feature 文件工作目录（相对路径基于配置文件所在目录）"),
   env: EnvSchema,
-  executor: ExecutorSchema.default({}),
 });
 
+export type AuthConfig = z.infer<typeof AuthSchema>;
 export type AppConfig = z.infer<typeof ConfigSchema>;
 
 // ─── Configuration Loader ───────────────────────────────────────────────────

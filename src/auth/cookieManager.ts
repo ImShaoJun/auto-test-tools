@@ -1,4 +1,4 @@
-import type { AppConfig } from "../config.js";
+import type { AppConfig, AuthConfig } from "../config.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -15,7 +15,6 @@ let cachedCookie: CachedCookie | null = null;
 
 /**
  * 从 JSON 对象中按点分路径提取值
- * 例如 getByPath({ data: { cookie: "abc" } }, "data.cookie") => "abc"
  */
 function getByPath(obj: unknown, path: string): unknown {
   const keys = path.split(".");
@@ -30,10 +29,15 @@ function getByPath(obj: unknown, path: string): unknown {
 }
 
 /**
- * 获取认证 Cookie。
- * 优先返回内存缓存（30 分钟 TTL），缓存失效则调用登录接口重新获取。
+ * 通过调用登录接口获取 Cookie
+ *
+ * @param baseUrl - API 基础 URL
+ * @param auth - 认证配置
  */
-export async function getCookie(config: AppConfig): Promise<string> {
+export async function fetchCookie(
+  baseUrl: string,
+  auth: AuthConfig
+): Promise<string> {
   // 检查缓存
   if (cachedCookie && Date.now() < cachedCookie.expiresAt) {
     console.error("[auth] 使用缓存的 Cookie");
@@ -41,7 +45,7 @@ export async function getCookie(config: AppConfig): Promise<string> {
   }
 
   // 调用登录接口
-  const loginUrl = `${config.env.baseUrl}${config.env.authLoginUrl}`;
+  const loginUrl = `${baseUrl}${auth.loginUrl}`;
   console.error(`[auth] 正在请求登录接口: ${loginUrl}`);
 
   let response: Response;
@@ -49,7 +53,7 @@ export async function getCookie(config: AppConfig): Promise<string> {
     response = await fetch(loginUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(config.env.authLoginPayload),
+      body: JSON.stringify(auth.loginPayload),
     });
   } catch (err) {
     throw new Error(
@@ -73,11 +77,11 @@ export async function getCookie(config: AppConfig): Promise<string> {
   }
 
   // 按 cookieFieldPath 提取 cookie 值
-  const cookieValue = getByPath(jsonBody, config.env.cookieFieldPath);
+  const cookieValue = getByPath(jsonBody, auth.cookieFieldPath);
 
   if (typeof cookieValue !== "string" || cookieValue.length === 0) {
     throw new Error(
-      `登录接口响应中无法通过路径 "${config.env.cookieFieldPath}" 提取到有效的 cookie 值。\n响应体: ${JSON.stringify(jsonBody).slice(0, 500)}`
+      `登录接口响应中无法通过路径 "${auth.cookieFieldPath}" 提取到有效的 cookie 值。\n响应体: ${JSON.stringify(jsonBody).slice(0, 500)}`
     );
   }
 
