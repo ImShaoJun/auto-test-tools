@@ -1,0 +1,14 @@
+{
+  "workspaceDir": "./features",
+  "env": {
+    "baseUrl": "http://localhost:8080",
+    "auth": {
+      "loginUrl": "/api/auth/login",
+      "loginPayload": {
+        "username": "test_user",
+        "password": "test_pass"
+      },
+      "cookieFieldPath": "data.cookie"
+    }
+  }
+}
