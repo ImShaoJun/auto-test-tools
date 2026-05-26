@@ -1,12 +1,12 @@
-# Karate MCP Server (v2.0)
+# BDD API Testing MCP Server (v2.0)
 
 这是一个专为大模型（特别是 **Claude Code**）设计的轻量级、纯 TypeScript 的 BDD 自动化接口测试 MCP Server。
 
 ## 🌟 核心特性
 
-- **纯 Node.js 实现**：彻底摆脱了传统 Karate 框架对 Java、Maven 和 JRE 的依赖。
+- **纯 Node.js 实现**：彻底摆脱了传统测试框架对 Java 等环境的依赖。
 - **专为大模型定制**：在工具的元数据中内置了自定义的 Gherkin DSL 语法规范，大模型（如 Claude）调用时能零基础学会如何编写测试脚本。
-- **开箱即用的测试引擎**：内置 HTTP 执行器和结构化匹配器（支持 Karate 风格的 `#number`, `#[_ > 0]` 断言），进程内极速运行。
+- **开箱即用的测试引擎**：内置 HTTP 执行器和结构化匹配器（支持类似 `#number`, `#[_ > 0]` 断言），进程内极速运行。
 - **智能 Cookie 管理**：支持无感知的自动化登录认证、Cookie 缓存（30 分钟）以及运行时动态传入认证参数。
 - **接口串联编排**：支持在单个 Scenario 中提取变量，并向下游请求传递，实现复杂的业务流测试。
 
@@ -31,7 +31,7 @@ npm run build
 
 ## ⚙️ 配置说明
 
-在项目根目录下创建一个 `karate-mcp.config.json` 文件（可以复制 `karate-mcp.config.example.json`），配置格式如下：
+在项目根目录下创建一个 `bdd-mcp.config.json` 文件（可以复制 `bdd-mcp.config.example.json`），配置格式如下：
 
 ```json
 {
@@ -66,12 +66,12 @@ npm run build
 ```json
 {
   "mcpServers": {
-    "karate-mcp": {
+    "bdd-mcp": {
       "command": "node",
       "args": [
         "C:/Users/13777/Documents/projects/auto-test-tools/dist/index.js",
         "--config",
-        "C:/Users/13777/Documents/projects/auto-test-tools/karate-mcp.config.json"
+        "C:/Users/13777/Documents/projects/auto-test-tools/bdd-mcp.config.json"
       ]
     }
   }
@@ -101,7 +101,7 @@ npm run build
 
 ## 📝 支持的自定义 Gherkin 语法大全
 
-本引擎实现了一个精简且强大的 Karate 风格语法子集：
+本引擎实现了一个精简且强大的 BDD 语法子集：
 
 ### 1. 基础请求构造
 ```gherkin

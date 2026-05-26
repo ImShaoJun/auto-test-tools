@@ -1,10 +1,11 @@
 {
-  "name": "karate-mcp-server",
+  "name": "bdd-mcp-server",
   "version": "2.0.0",
-  "description": "MCP Server for BDD automated API testing — pure TypeScript engine with Karate-style DSL, no Java dependency",
+  "description": "MCP Server for BDD automated API testing — pure TypeScript engine with custom DSL, no Java dependency",
   "type": "module",
   "bin": {
-    "karate-mcp-server": "./dist/index.js"
+    "bdd-mcp-server": "./dist/index.js"
+    "server-bdd": "./dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -13,7 +14,6 @@
   },
   "keywords": [
     "mcp",
-    "karate",
     "bdd",
     "testing",
     "automation",

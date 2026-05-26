@@ -95,7 +95,7 @@ async function main() {
 
   // 3. 创建 MCP Server
   const server = new Server(
-    { name: "karate-mcp-server", version: "2.0.0" },
+    { name: "bdd-mcp-server", version: "2.0.0" },
     { capabilities: { tools: {} } }
   );
 
@@ -156,7 +156,7 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.error("[server] karate-mcp-server v2.0 已启动（纯 TS 引擎）");
+  console.error("[server] bdd-mcp-server v2.0 已启动（纯 TS 引擎）");
   console.error(`[server] 基础 URL: ${config.env.baseUrl}`);
   console.error(`[server] 工作目录: ${workspaceDir}`);
 }

@@ -49,10 +49,10 @@ export function loadConfig(cliConfigPath?: string): AppConfig {
   }
 
   // 优先级 2：当前工作目录
-  candidates.push(resolve(process.cwd(), "karate-mcp.config.json"));
+  candidates.push(resolve(process.cwd(), "bdd-mcp.config.json"));
 
   // 优先级 3：用户 Home 目录
-  candidates.push(join(homedir(), ".karate-mcp", "config.json"));
+  candidates.push(join(homedir(), ".bdd-mcp", "config.json"));
 
   // 查找第一个存在的配置文件
   let configPath: string | undefined;
