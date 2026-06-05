@@ -1,0 +1,87 @@
+# 体系化 AI 驱动 UI 自动化测试架构设计方案
+
+## 1. 架构概述
+本系统旨在通过分离“测试用例生成”与“测试用例执行”，构建基于行为驱动开发（BDD）的 UI 自动化测试框架。系统依赖大语言模型（LLM）结合全量代码索引进行静态资产生成与自愈，并通过独立的执行器完成 UI 交互验证。
+
+系统划分为三个独立层级：
+1. **智能产出层 (Generation Layer)**：以大模型（如 Claude）为核心，基于业务需求与聚合版前端源码索引（`repomix.xml`），输出结构化的测试资产。
+2. **静态资产层 (Asset Layer)**：依托版本控制系统（Git）存储测试依赖文件，包含 `.feature` 业务用例、`locators.json` 元素映射字典及 `auth.json` 会话状态快照。
+3. **执行层 (Execution Layer)**：基于 Node.js 封装的 MCP 工具，以 Cucumber.js 为测试运行器，Playwright 为底层浏览器驱动引擎，负责解析资产并输出执行结果。
+
+---
+
+## 2. 静态资产层设计
+
+### 2.1 元素映射字典 (`locators.json`)
+作为解耦业务意图与底层 DOM 结构的中间件。字典仅存储纯粹的定位器规则（如 CSS/XPath/TestID），不包含元素行为属性。
+*   **结构规范**：采用 `Namespace.Key` 的两级结构。Namespace 与前端源码组件或路由名称保持映射。
+*   **参数化支持**：值（Value）支持占位符，用于处理列表或表格等动态元素。
+```json
+{
+  "DataMapView": {
+    "SearchInput": "#search-container > input",
+    "TenantSwitchRow": "text='{tenantName}' >> xpath=ancestor::tr >> .switch-btn"
+  }
+}
+```
+
+### 2.2 测试用例 (`.feature`)
+采用 Gherkin 语法。UI 交互对象强制使用 `locators.json` 中的标识符。复杂的前端行为（如新开窗口、异步加载）在步骤描述中显式声明。
+```gherkin
+Given loaded state from "auth.json"
+When I click "DataMapView.TenantSwitchRow" with parameter "Tenant-A"
+And I wait for the network response from "/api/v1/tenant/switch"
+And I click "DataMapView.CanvasLink" which opens a new window
+Then I switch to the newly opened window
+And I should see "Canvas.Header"
+```
+
+### 2.3 会话状态文件 (`auth.json`)
+由前置脚本（Setup Script）生成。用于存储跳过单点登录（CAS）、扫码登录等反自动化机制所需的 Cookie 与 LocalStorage 快照，确保核心用例在已授权上下文中执行。
+
+---
+
+## 3. 执行层 (MCP 工具) 设计
+
+执行层对外暴露单一 MCP 接口，接收 `.feature` 文件路径，返回测试结果报告及异常上下文。内部预置一组高度泛化的步骤定义（Step Definitions）。
+
+### 3.1 基础交互逻辑
+*   **解析定位**：执行器正则匹配步骤中的字符串，通过路径读取 `locators.json`，完成变量插值后交由 Playwright 执行。
+*   **缓存未命中拦截**：若字典中不存在对应 Key，直接抛出 `[Cache Miss]` 异常，中断执行。
+
+### 3.2 异步与窗口管理机制
+*   **网络闲置等待**：提供显式监听特定 API 响应的步骤封装，调用 `page.waitForResponse()` 避免组件“假就绪”引发断言失败。
+*   **多窗口接管**：匹配到声明产生新窗口的步骤时，执行器调用 `Promise.all([context.waitForEvent('page'), clickAction])`，并将当前操作句柄（Page Context）转移至新窗口。
+
+### 3.3 异常捕获与环境快照反馈
+当执行器抛出 `TimeoutError` 或其他异常时，必须组装客观的现场数据返回给智能产出层：
+1. **标准错误堆栈**：说明失败的动作与 Locator 字符串。
+2. **Tab 页签统计**：统计当前 Browser Context 中的开启窗口数量。如检测到 `pages.length > 1`，则在错误信息中追加多窗口状态提示。
+3. **DOM 快照**：抓取当前页面的精简无障碍树（A11y Tree）或发生错误区域的 DOM 结构，作为错误日志的附件输出。
+
+---
+
+## 4. 微前端/多仓库支持策略
+
+针对前端代码仓库分散的情况，采用**离线聚合策略**：
+1. 配置 CI/CD 流水线前置任务，拉取所有相关业务线（如门户层、数据开发层、租户中心）的最新前端代码。
+2. 运行代码分析工具，将各仓库代码统一编译输出为单文件的 `repomix.xml`。
+3. LLM 均以该全量聚合文件作为上下文基准，确保跨系统跳转时源码检索无断层。
+
+---
+
+## 5. 工作流 (Workflows)
+
+### 5.1 常规验证工作流 (CI/CD / 回归测试)
+1. 触发构建任务。
+2. 调用前置脚本更新 `auth.json`。
+3. 执行器读取 `.feature` 和 `locators.json`，驱动 Playwright 完成操作与断言。
+4. 输出最终测试报告。全过程不涉及 LLM 调用。
+
+### 5.2 资产生成与自愈工作流 (LLM 介入)
+1. **触发条件**：常规验证工作流抛出异常（如定位器失效、缓存未命中），或接收到新增用例需求。
+2. **上下文注入**：向 LLM 输入当前操作意图、执行器返回的异常数据（错误栈、Tab 统计、DOM 快照）、以及 `repomix.xml`。
+3. **逻辑判定**：
+   *   若对比发现源码组件的内部结构改变，但业务交互未变：LLM 仅修改并覆写本地的 `locators.json`。
+   *   若对比发现业务入口、跳转逻辑发生重构：LLM 同步修改 `.feature` 步骤与 `locators.json`。
+4. **资产固化**：修改完成的资产文件通过版本控制系统（Git）提交，作为代码库的一部分进行合并与归档。
