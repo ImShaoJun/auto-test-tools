@@ -37,7 +37,8 @@ export interface FeatureResult {
 export async function runFeature(
   featureContent: string,
   baseUrl: string,
-  cookie?: string
+  cookie?: string,
+  workspaceDir: string = process.cwd()
 ): Promise<FeatureResult> {
   // 解析 Gherkin AST
   const uuidFn = Messages.IdGenerator.uuid();
@@ -101,7 +102,7 @@ export async function runFeature(
     console.error(`[runner] 执行 Scenario: ${scenario.name}`);
 
     // 每个 Scenario 创建独立的 Context
-    const ctx = new ExecutionContext(baseUrl, cookie);
+    const ctx = new ExecutionContext(baseUrl, cookie, workspaceDir);
     const stepResults: StepResult[] = [];
     let scenarioPassed = true;
     let scenarioError: string | undefined;
@@ -172,10 +173,11 @@ export async function runFeature(
 export async function runFeatureFile(
   filePath: string,
   baseUrl: string,
-  cookie?: string
+  cookie?: string,
+  workspaceDir: string = process.cwd()
 ): Promise<FeatureResult> {
   const content = readFileSync(filePath, "utf-8");
-  return runFeature(content, baseUrl, cookie);
+  return runFeature(content, baseUrl, cookie, workspaceDir);
 }
 
 /**

@@ -3,9 +3,14 @@
 // 每个 Scenario 拥有独立的 ExecutionContext，维护 HTTP 请求/响应状态和变量，
 // 并负责管理独立的浏览器上下文（用于 UI 测试）。
 
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { LocatorMapper } from "./locatorMapper.js";
+import { resolve } from "node:path";
+import { existsSync } from "node:fs";
 
 export class ExecutionContext {
+  workspaceDir: string;
+  locatorMapper: LocatorMapper;
   /** 基础 URL，如 http://localhost:8080 */
   baseUrl: string = "";
 
@@ -35,15 +40,16 @@ export class ExecutionContext {
 
   // ─── UI Automation State ───
   browser: Browser | null = null;
+  browserContext: BrowserContext | null = null;
   page: Page | null = null;
 
   /**
    * 从配置初始化上下文
    */
-  constructor(baseUrl?: string, cookie?: string) {
-    if (baseUrl) {
-      this.baseUrl = baseUrl;
-    }
+  constructor(baseUrl: string = "", cookie?: string, workspaceDir: string = process.cwd()) {
+    this.baseUrl = baseUrl;
+    this.workspaceDir = workspaceDir;
+    this.locatorMapper = new LocatorMapper(workspaceDir);
     if (cookie) {
       this.headers["Cookie"] = cookie;
     }
@@ -182,6 +188,30 @@ export class ExecutionContext {
   // ─── UI Automation Methods ────────────────────────────────────────────────
 
   /**
+   * 启动浏览器并加载 auth.json 状态
+   */
+  async initDriverWithAuth(authFileName: string): Promise<Page> {
+    if (!this.browser) {
+      console.error("[ui] 正在启动浏览器...");
+      this.browser = await chromium.launch({ headless: true });
+    }
+    if (!this.browserContext) {
+      const authPath = resolve(this.workspaceDir, authFileName);
+      if (existsSync(authPath)) {
+        console.error(`[ui] 加载会话状态: ${authPath}`);
+        this.browserContext = await this.browser.newContext({ storageState: authPath });
+      } else {
+        console.warn(`[ui] 未找到会话状态文件: ${authPath}，以匿名身份启动`);
+        this.browserContext = await this.browser.newContext();
+      }
+    }
+    if (!this.page) {
+      this.page = await this.browserContext.newPage();
+    }
+    return this.page;
+  }
+
+  /**
    * 启动浏览器并打开页面（如果尚未启动）
    */
   async initDriver(url?: string): Promise<Page> {
@@ -189,8 +219,11 @@ export class ExecutionContext {
       console.error("[ui] 正在启动浏览器...");
       this.browser = await chromium.launch({ headless: true });
     }
+    if (!this.browserContext) {
+      this.browserContext = await this.browser.newContext();
+    }
     if (!this.page) {
-      this.page = await this.browser.newPage();
+      this.page = await this.browserContext.newPage();
     }
     if (url) {
       console.error(`[ui] 导航至: ${url}`);
@@ -206,6 +239,10 @@ export class ExecutionContext {
     if (this.page) {
       await this.page.close().catch(() => {});
       this.page = null;
+    }
+    if (this.browserContext) {
+      await this.browserContext.close().catch(() => {});
+      this.browserContext = null;
     }
     if (this.browser) {
       console.error("[ui] 关闭浏览器...");

@@ -59,6 +59,15 @@ And I should see "Canvas.Header"
 2. **Tab 页签统计**：统计当前 Browser Context 中的开启窗口数量。如检测到 `pages.length > 1`，则在错误信息中追加多窗口状态提示。
 3. **DOM 快照**：抓取当前页面的精简无障碍树（A11y Tree）或发生错误区域的 DOM 结构，作为错误日志的附件输出。
 
+### 3.4 元素遮挡与复杂交互处理机制
+针对现代前端框架中常见的“元素被遮挡”（Element Intercepted）问题（如被全局 Loading、悬浮通知或固定表头遮挡），执行层提供多级处理策略：
+1. **默认自适应等待**：依赖 Playwright 原生的 Actionability 检查，自动等待遮挡物消失。
+2. **显式等待与强制绕过**：在 `.feature` 步骤定义中扩展特殊语义支持，处理常规等待超时的情况：
+   * **强制点击**：`When I force click "Namespace.Key"`（触发 Playwright `{ force: true }`）。
+   * **原生 JS 派发**：`When I dispatch click to "Namespace.Key"`（触发 DOM `dispatchEvent('click')`）。
+   * **显式隐退等待**：`And I wait for "Namespace.Mask" to be hidden`。
+3. **结合 LLM 的自愈兜底**：若抛出元素遮挡等拦截异常，错误日志（含被遮挡元素信息与 DOM 快照）将上报至智能产出层。大模型可据此自主修改 `.feature`，补充前置消除干扰步骤，或切换至强力点击模式。
+
 ---
 
 ## 4. 微前端/多仓库支持策略

@@ -145,51 +145,106 @@ export async function executeStep(
       return ok(keyword, trimmed);
     }
 
-    // ─── UI Automation Steps ────────────────────────────────────────────────
+    // ─── UI Automation Steps (New BDD Architecture) ─────────────────────────
 
-    // ── driver 'https://example.com' ──
+    // ── loaded state from "auth.json" ──
+    if (trimmed.startsWith("loaded state from ")) {
+      const value = String(extractValue(trimmed.substring(18), ctx));
+      await ctx.initDriverWithAuth(value);
+      return ok(keyword, trimmed);
+    }
+
+    // ── I wait for the network response from "/api/v1/tenant/switch" ──
+    if (trimmed.startsWith("I wait for the network response from ")) {
+      if (!ctx.page) throw new Error("尚未初始化浏览器");
+      const urlPattern = String(extractValue(trimmed.substring(37), ctx));
+      await ctx.page.waitForResponse((res) => res.url().includes(urlPattern));
+      return ok(keyword, trimmed);
+    }
+
+    // ── I wait for "Namespace.Mask" to be hidden ──
+    if (trimmed.startsWith("I wait for ") && trimmed.endsWith(" to be hidden")) {
+      if (!ctx.page) throw new Error("尚未初始化浏览器");
+      const rawNamespace = trimmed.substring(11, trimmed.length - 13).trim();
+      const namespaceKey = String(extractValue(rawNamespace, ctx));
+      const selector = ctx.locatorMapper.get(namespaceKey);
+      await ctx.page.waitForSelector(selector, { state: 'hidden' });
+      return ok(keyword, trimmed);
+    }
+
+    // ── I force click "Namespace.Key" ──
+    if (trimmed.startsWith("I force click ")) {
+      if (!ctx.page) throw new Error("尚未初始化浏览器");
+      const namespaceKey = String(extractValue(trimmed.substring(14), ctx));
+      const selector = ctx.locatorMapper.get(namespaceKey);
+      await ctx.page.click(selector, { force: true });
+      return ok(keyword, trimmed);
+    }
+
+    // ── I click "Namespace.Key" ... ──
+    if (trimmed.startsWith("I click ")) {
+      if (!ctx.page) throw new Error("尚未初始化浏览器");
+      let remainder = trimmed.substring(8).trim();
+      let opensNewWindow = false;
+      let hasParam = false;
+      let paramValue = "";
+
+      if (remainder.endsWith(" which opens a new window")) {
+        opensNewWindow = true;
+        remainder = remainder.substring(0, remainder.length - 25).trim();
+      }
+
+      if (remainder.includes(" with parameter ")) {
+        hasParam = true;
+        const parts = remainder.split(" with parameter ");
+        remainder = parts[0].trim();
+        paramValue = String(extractValue(parts[1].trim(), ctx));
+      }
+
+      const namespaceKey = String(extractValue(remainder, ctx));
+      let selector: string;
+      if (hasParam) {
+        selector = ctx.locatorMapper.get(namespaceKey, { parameter: paramValue, TenantName: paramValue, tenantName: paramValue, value: paramValue });
+      } else {
+        selector = ctx.locatorMapper.get(namespaceKey);
+      }
+
+      if (opensNewWindow) {
+        if (!ctx.browserContext) throw new Error("Browser context missing");
+        const [newPage] = await Promise.all([
+          ctx.browserContext.waitForEvent('page'),
+          ctx.page.click(selector)
+        ]);
+        // 我们不在这里自动切换，等待显式的 switch 步骤
+      } else {
+        await ctx.page.click(selector);
+      }
+      return ok(keyword, trimmed);
+    }
+
+    // ── I switch to the newly opened window ──
+    if (trimmed === "I switch to the newly opened window") {
+      if (!ctx.browserContext) throw new Error("Browser context missing");
+      const pages = ctx.browserContext.pages();
+      if (pages.length < 2) throw new Error("没有检测到新开启的窗口");
+      ctx.page = pages[pages.length - 1]; // 切换到最新窗口
+      await ctx.page.bringToFront();
+      return ok(keyword, trimmed);
+    }
+
+    // ── I should see "Namespace.Target" ──
+    if (trimmed.startsWith("I should see ")) {
+      if (!ctx.page) throw new Error("尚未初始化浏览器");
+      const namespaceKey = String(extractValue(trimmed.substring(13), ctx));
+      const selector = ctx.locatorMapper.get(namespaceKey);
+      await ctx.page.waitForSelector(selector, { state: 'visible' });
+      return ok(keyword, trimmed);
+    }
+
+    // ── driver 'https://example.com' (保留以兼容纯API后跳转UI的场景) ──
     if (trimmed.startsWith("driver ")) {
       const value = extractValue(trimmed.substring(7), ctx);
       await ctx.initDriver(String(value));
-      return ok(keyword, trimmed);
-    }
-
-    // ── click '#btn' ──
-    if (trimmed.startsWith("click ")) {
-      if (!ctx.page) throw new Error("尚未初始化浏览器，请先调用 driver");
-      const selector = String(extractValue(trimmed.substring(6), ctx));
-      await ctx.page.click(selector);
-      return ok(keyword, trimmed);
-    }
-
-    // ── input '#input', 'text' ──
-    if (trimmed.startsWith("input ")) {
-      if (!ctx.page) throw new Error("尚未初始化浏览器，请先调用 driver");
-      const rest = trimmed.substring(6).trim();
-      // 解析两个参数：selector 和 text (简化按逗号分割，注意字符串内如果有逗号会出问题，这里做简单处理)
-      const commaIdx = rest.indexOf(",");
-      if (commaIdx === -1) throw new Error(`input 语法错误: ${trimmed}`);
-      const selectorRaw = rest.substring(0, commaIdx).trim();
-      const textRaw = rest.substring(commaIdx + 1).trim();
-      const selector = String(extractValue(selectorRaw, ctx));
-      const text = String(extractValue(textRaw, ctx));
-      await ctx.page.fill(selector, text);
-      return ok(keyword, trimmed);
-    }
-
-    // ── waitFor '.selector' ──
-    if (trimmed.startsWith("waitFor ")) {
-      if (!ctx.page) throw new Error("尚未初始化浏览器，请先调用 driver");
-      const selector = String(extractValue(trimmed.substring(8), ctx));
-      await ctx.page.waitForSelector(selector);
-      return ok(keyword, trimmed);
-    }
-
-    // ── screenshot 'path.png' ──
-    if (trimmed.startsWith("screenshot ")) {
-      if (!ctx.page) throw new Error("尚未初始化浏览器，请先调用 driver");
-      const path = String(extractValue(trimmed.substring(11), ctx));
-      await ctx.page.screenshot({ path });
       return ok(keyword, trimmed);
     }
 
@@ -197,7 +252,23 @@ export async function executeStep(
     return err(keyword, trimmed, `未知的步骤关键词: ${trimmed}`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return err(keyword, trimmed, msg);
+    let contextMsg = "";
+    if (ctx.browserContext) {
+      const pages = ctx.browserContext.pages();
+      contextMsg += `\n[Tab页签统计] 当前开启窗口数量: ${pages.length}`;
+      if (pages.length > 1) {
+        contextMsg += " (检测到多窗口，请确认是否需要切换上下文)";
+      }
+    }
+    if (ctx.page) {
+      try {
+        const snapshot = await (ctx.page as any).accessibility.snapshot();
+        contextMsg += `\n[DOM A11y快照]\n${JSON.stringify(snapshot, null, 2).substring(0, 2000)}`;
+      } catch (err) {
+        // 忽略快照获取失败
+      }
+    }
+    return err(keyword, trimmed, msg + contextMsg);
   }
 }
 

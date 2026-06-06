@@ -76,7 +76,7 @@ export async function handleExecuteFeature(
   // 3. 执行 Feature
   console.error("[executor] 开始执行 Feature...");
   try {
-    const result = await runFeature(featureContent, config.env.baseUrl, cookie);
+    const result = await runFeature(featureContent, config.env.baseUrl, cookie, workspaceDir);
     return formatResult(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

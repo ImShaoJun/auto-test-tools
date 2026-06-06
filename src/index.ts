@@ -8,10 +8,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { resolve } from "node:path";
 import { loadConfig, parseCliConfigPath } from "./config.js";
-import {
-  handleGenerateFeature,
-  type GenerateParams,
-} from "./tools/generator.js";
+
 import {
   handleExecuteFeature,
   type ExecuteParams,
@@ -20,26 +17,6 @@ import {
 // ─── Tool Definitions ───────────────────────────────────────────────────────
 
 const TOOLS = [
-  {
-    name: "generate_feature",
-    description:
-      "将生成的 BDD 测试脚本（.feature 文件）写入磁盘。\n\n**重要提示：由于你（LLM）负责生成脚本内容，你必须严格遵循以下自定义 Gherkin DSL 语法规则**：\n\n1. **API 请求构建 (Given)**\n   - `Given url '<URL>'` — 设置基础 URL\n   - `Given path '<路径>'` — 设置请求路径\n   - `Given header <Name> = '<value>'`\n   - `Given cookie '<value>'`\n   - `Given param <name> = <value>`\n   - `Given request <JSON>` 或使用 DocString 形式\n\n2. **UI 浏览器控制 (Given/When)**\n   - `Given driver '<URL>'` — 启动浏览器并导航至页面\n   - `When click '<CSS选择器>'` — 点击元素\n   - `When input '<CSS选择器>', '<文本>'` — 填入表单\n   - `When waitFor '<CSS选择器>'` — 等待元素出现\n   - `When screenshot '<路径>'` — 截图\n\n3. **变量与提取 (def)**\n   - `Given def <var> = response.data.id` — 从 API 响应提取\n   - `Given def <var> = text('<CSS选择器>')` — 从 UI 提取文本\n   - `Given def <var> = attribute('<CSS选择器>', 'href')` — 从 UI 提取属性\n\n4. **执行 API (When)**\n   - `When method GET|POST|PUT|DELETE|PATCH`\n\n5. **断言 (Then)**\n   - `Then status <code>`\n   - `Then match <expr> == <expected>`\n   - `Then match <expr> != <expected>`\n   - `Then match <expr> contains <object>`\n   - `Then match each <array> contains <object>`\n\n6. **类型标记 (用于 match 断言)**\n   - `'#number'`, `'#string'`, `'#boolean'`, `'#array'`, `'#object'`, `'#notnull'`, `'#null'`, `'#uuid'`\n   - `'#[_ > 0]'` (数组长度断言)\n\n7. **调试**\n   - `And print <expr>`\n\n**混合测试指南**：你可以在同一个 Scenario 内先调用 API (method POST) 准备数据，然后再调用 UI (driver) 验证显示。API 断言使用 `response.xxx`，UI 断言请先用 `def var = text(...)` 提取再用 `match var == ...` 验证。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        targetPath: {
-          type: "string",
-          description:
-            "保存的 .feature 文件路径（相对 workspaceDir 或绝对路径）。",
-        },
-        featureContent: {
-          type: "string",
-          description: "按照上述 DSL 规则生成的完整 .feature 文件内容。",
-        },
-      },
-      required: ["targetPath", "featureContent"],
-    },
-  },
   {
     name: "execute_feature",
     description:
@@ -109,20 +86,7 @@ async function main() {
     const { name, arguments: args } = request.params;
 
     switch (name) {
-      case "generate_feature": {
-        try {
-          const params = args as unknown as GenerateParams;
-          const result = await handleGenerateFeature(params, workspaceDir);
-          return { content: [{ type: "text" as const, text: result }] };
-        } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          return {
-            content: [
-              { type: "text" as const, text: `❌ 写入失败: ${errorMsg}` },
-            ],
-          };
-        }
-      }
+
 
       case "execute_feature": {
         try {
